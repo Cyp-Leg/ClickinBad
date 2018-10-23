@@ -88,3 +88,4 @@ fabric.properties
 .idea
 project
 target
+src/main/resources/data-students.json
