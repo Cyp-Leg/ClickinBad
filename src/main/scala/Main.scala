@@ -7,7 +7,7 @@ import org.joda.time.format.DateTimeFormat
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.{udf, when, col}
 
-object PredictClick {
+object clickinBad {
   /* ----------------------------------------- */
   /* -------------- Preprocessing ------------ */
   /* ----------------------------------------- */
