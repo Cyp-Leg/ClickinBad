@@ -1,10 +1,8 @@
-import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.feature.{StringIndexer, OneHotEncoder, VectorAssembler}
-import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.sql.DataFrame
 import scala.util.matching.Regex
 import org.joda.time.format.DateTimeFormat
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.functions.{udf, when, col}
 
 object clickinBad {
@@ -51,4 +49,19 @@ object clickinBad {
 
         ds2 // return clean dataframe
     }
+
+    def main(args: Array[String]): Unit = {
+    val spark = SparkSession
+      .builder()
+      .appName("Spark SQL basic example")
+      .config(new SparkConf().setMaster("local").setAppName("AAAAA"))
+      .getOrCreate()
+
+    val ds = spark.read.json("/home/cyp/IG/WI/data-students.json")
+
+    val ds2 = preprocess(ds)
+    ds2.summary().show
+
+    spark.close()
+  }
 }
