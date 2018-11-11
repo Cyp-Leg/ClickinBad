@@ -30,7 +30,7 @@ object clickinBad {
         }
 
         // Replacing null values by "Unknown"s
-        val unknown = df.na.fill(Map("city" -> "Unknown","impid" -> "Unknown","interests" -> "Unknown","network" -> "Unknown","type" -> "Unknown"))
+        val unknown = df.na.fill(Map("city" -> "Unknown","impid" -> "Unknown","interests" -> "Unknown","network" -> "Unknown","type" -> "Unknown", "os" -> "Unknown"))
 
         // Removing all add with size null
         val ds2 = unknown.filter(!col("size").getItem(0).isNull).filter(!col("size").getItem(1).isNull)
@@ -42,7 +42,8 @@ object clickinBad {
                 
                 str match {
                 case windows_pattern(x) => "Windows Phone"
-                case null | "Other" | "Unknown" => "Unknown"
+                case "ios" | "iOS" => "iOS"
+                case "Rim" | "Bada" | "WebOS"| "Symbian" | "BlackBerry" => "Unknown"
                 case x => x.toLowerCase.capitalize
             }
         }
