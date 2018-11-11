@@ -4,6 +4,8 @@ import org.joda.time.format.DateTimeFormat
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.functions.{udf, when, col}
+import java.util.Date
+import java.text.SimpleDateFormat
 
 object clickinBad {
   /* ----------------------------------------- */
@@ -48,6 +50,12 @@ object clickinBad {
             }
         }
 
+
+        def epochToDate = udf((epochMillis: Long) => {
+            val df:SimpleDateFormat = new SimpleDateFormat("yyyy-MM-dd")
+            df.format(epochMillis)
+        })
+
         ds2 // return clean dataframe
     }
 
@@ -62,6 +70,8 @@ object clickinBad {
 
     val ds2 = preprocess(ds)
     ds2.summary().show
+
+    epochToDate(ds2.col("time")[0])
 
     spark.close()
   }
