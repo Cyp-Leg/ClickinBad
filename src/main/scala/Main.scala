@@ -54,17 +54,19 @@ object clickinBad {
         }
 
         val df2 = df.select("appOrSite","interests","media","type","bidfloor","label","os","network","timestamp","size")
+        val df3 = df2.filter(!col("size").getItem(0).isNull)
+        val df4 = df3.filter(!col("size").getItem(1).isNull)
 
-        val df3 = 
-      {df2.withColumn("bidfloor", when(col("bidfloor").isNull, 3).otherwise(col("bidfloor")))
+        val df5 = 
+      {df4.withColumn("bidfloor", when(col("bidfloor").isNull, 3).otherwise(col("bidfloor")))
       .withColumn("label", when(col("label") === true, 1).otherwise(0))
-      .withColumn("os", os(df2("os")))
-      .withColumn("network", network(df2("network")))
-      .withColumn("timestamp", epochToDate(df2("timestamp")))} 
+      .withColumn("os", os(df4("os")))
+      .withColumn("network", network(df4("network")))
+      .withColumn("timestamp", epochToDate(df4("timestamp")))} 
 
         
 
-        df3 // return clean dataframe
+        df4 // return clean dataframe
     }
 
     def epochToDate = udf((epochMillis: Long) => {
@@ -83,7 +85,7 @@ object clickinBad {
 
     val ds2 = preprocess(ds)
     //ds2.summary().show
-    ds2.groupBy("os").count().show()
+    ds2.summary().show()
 
     print("ICIII \n" + epochToDate(ds2.col("timestamp").getItem(0)).toString() +"\n")
 
