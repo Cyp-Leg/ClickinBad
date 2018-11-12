@@ -51,13 +51,15 @@ object clickinBad {
         }
 
 
-        def epochToDate = udf((epochMillis: Long) => {
-            val df:SimpleDateFormat = new SimpleDateFormat("yyyy-MM-dd")
-            df.format(epochMillis)
-        })
+        
 
         ds2 // return clean dataframe
     }
+
+    def epochToDate = udf((epochMillis: Long) => {
+            val df:SimpleDateFormat = new SimpleDateFormat("yyyy-MM-dd")
+            df.format(epochMillis)
+    })
 
     def main(args: Array[String]): Unit = {
     val spark = SparkSession
@@ -71,7 +73,7 @@ object clickinBad {
     val ds2 = preprocess(ds)
     ds2.summary().show
 
-    epochToDate(ds2.col("time")[0])
+    epochToDate(ds2.col("timestamp").getItem(0))
 
     spark.close()
   }
