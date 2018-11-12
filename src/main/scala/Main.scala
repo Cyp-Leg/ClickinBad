@@ -21,12 +21,14 @@ object clickinBad {
                 val ger = new Regex("262-(.*)")
 
                 str match {
+                case null => "Unknown"
                 case fr(x) => "France"
-                case null | "Other" | "Unknown" => "Unknown"
+                case "Other" | "Unknown" => "Unknown"
                 case can(x) => "Canada"
                 case es(x) => "Espagne"
                 case tur(x) => "Turquie"
                 case ger(x) => "Allemagne"
+                case _ => "Other"
             }
         }
 
@@ -38,12 +40,15 @@ object clickinBad {
         // Gathering all windows phones together, set nulls & "Other" to "Unknown"
         val os = udf {
             (str: String) =>
-                val windows_pattern = new Regex("(.*)indows(.*)")
+                val windows_pattern = new Regex("Windows(.*)")
+                val windows_lowercase = new Regex("windows(.*)")
                 
                 str match {
+                case null => "Unknown"
                 case windows_pattern(x) => "Windows Phone"
+                case windows_lowercase(x) => "Windows Phone"
                 case "ios" | "iOS" => "iOS"
-                case "Rim" | "Bada" | "WebOS"| "Symbian" | "BlackBerry" | null => "Unknown"
+                case "Rim" | "Bada" | "WebOS"| "Symbian" | "blackberry" => "Other"
                 case x => x.toLowerCase.capitalize
             }
         }
