@@ -62,17 +62,26 @@ object clickinBad {
       .withColumn("label", when(col("label") === true, 1).otherwise(0))
       .withColumn("os", os(df4("os")))
       .withColumn("network", network(df4("network")))
-      .withColumn("timestamp", epochToDate(df4("timestamp")))} 
+      .withColumn("timestamp", classificateDate(epochToDate(df4("timestamp"))))} 
 
         
 
-        df4 // return clean dataframe
+        df5 // return clean dataframe
     }
 
-    def epochToDate = udf((epochMillis: Long) => {
-            val df:SimpleDateFormat = new SimpleDateFormat("yyyy-MM-dd")
-            df.format(epochMillis)
+    // convert epoch to date and take only hours
+    def epochToDate = udf((current_time : Long)  =>{
+      DateTimeFormat.forPattern("HH").print(current_time *1000).toInt
     })
+
+    def classificateDate= udf((date:Int)=>{
+      date match{
+        case x if (x > 6 && x < 14) => "Morning"
+        case x if (x >= 14 && x < 22) => "Afternoon"
+        case _ => "Night"
+      }
+    })
+
 
     def main(args: Array[String]): Unit = {
     val spark = SparkSession
@@ -84,10 +93,9 @@ object clickinBad {
     val ds = spark.read.json("/home/cyp/IG/WI/data-students.json")
 
     val ds2 = preprocess(ds)
-    //ds2.summary().show
     ds2.summary().show()
-
-    print("ICIII \n" + epochToDate(ds2.col("timestamp").getItem(0)).toString() +"\n")
+    //ds.groupBy("network").count().sort(col("count")).show()
+    //ds2.select("timestamp").show()
 
     spark.close()
   }
