@@ -80,12 +80,26 @@ object clickinBad {
       .config(new SparkConf().setMaster("local").setAppName("AAAAA"))
       .getOrCreate()
 
-    val ds = spark.read.json("/home/cyp/IG/WI/data-students.json")
+    val ds = spark.read.json("../WI/data/data-students.json")
 
     val ds2 = preprocess(ds)
     //ds2.summary().show()
     ds2.groupBy("network").count().sort(col("count")).show()
     //ds2.select("timestamp").show()
+    val dsBidZero = ds2.filter(col("bidfloor") === 0)
+    val dsBidZeroClick = dsBidZero.filter(col("label") === true).count()
+    val dsBidZeroNoClick = dsBidZero.filter(col("label") === false).count()
+
+    print("\n\n\n\n\n\n\n\n\n\n\n")
+    print(dsBidZero.count())
+    print("\n\n\n\n\n\n\n\n\n\n\n")
+    print(dsBidZeroClick)
+    print("\n\n\n\n\n\n\n\n\n\n\n")
+    print(dsBidZeroNoClick)
+    print("\n\n\n\n\n\n\n\n\n\n\n")
+
+
+
 
     spark.close()
   }
