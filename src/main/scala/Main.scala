@@ -6,6 +6,9 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.functions.{udf, when, col}
 import java.util.Date
 import java.text.SimpleDateFormat
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.feature.{StringIndexer, OneHotEncoder, VectorAssembler}
+import org.apache.log4j.{Logger, Level}
 
 object clickinBad {
   /* ----------------------------------------- */
@@ -43,7 +46,9 @@ object clickinBad {
             }
         }
 
-        val df2 = df.select("appOrSite","interests","media","type","bidfloor","label","os","network","timestamp","size","city")
+        val df1 = df.na.fill(Map("city" -> "Unknown","impid" -> "Unknown","interests" -> "Unknown","network" -> "Unknown","type" -> "Unknown"))
+
+        val df2 = df1.select("appOrSite","interests","media","type","bidfloor","label","os","network","timestamp","size","city", "publisher")
         val df3 = df2.filter(!col("size").getItem(0).isNull)
         val df4 = df3.filter(!col("size").getItem(1).isNull)
 
@@ -51,29 +56,33 @@ object clickinBad {
       {df4.withColumn("bidfloor", when(col("bidfloor").isNull, 3).otherwise(col("bidfloor")))
       .withColumn("label", when(col("label") === true, 1).otherwise(0))
       .withColumn("os", os(df4("os")))
-      .withColumn("network", network(df4("network")))
-      .withColumn("timestamp", classificateDate(epochToDate(df4("timestamp"))))} 
+      .withColumn("network", network(df4("network")))} 
 
-        
 
-        df5 // return clean dataframe
+      //print("\n\n\n" + df5.dtypes.foreach(println) +"\n\n")
+
+      val categoricals = df5.dtypes.filter (_._2 == "StringType").map (_._1)
+
+      val indexers = categoricals.map (
+        c => new StringIndexer().setInputCol(c).setOutputCol(s"${c}_idx")
+      )
+
+      val encoders = categoricals.map (
+        c => new OneHotEncoder().setInputCol(s"${c}_idx").setOutputCol(s"${c}_enc")
+      )
+
+      val pipeline = new Pipeline().setStages(indexers ++ encoders)
+      val df6 = pipeline.fit(df5).transform(df5)
+
+      val assembler = new VectorAssembler().setInputCols(Array("appOrSite_enc", "bidfloor", "media_enc", "os_enc", "publisher_enc","network_enc")).setOutputCol("features")
+      //return a dataframe with all of the  feature columns in  a vector column**
+
+      assembler.transform(df6).select("appOrSite", "bidfloor", "city", "interests", "label", "media", "network", "os", "publisher", "type", "features")
     }
-
-    // convert epoch to date and take only hours
-    def epochToDate = udf((current_time : Long)  =>{
-      DateTimeFormat.forPattern("HH").print(current_time *1000).toInt
-    })
-
-    def classificateDate= udf((date:Int)=>{
-      date match{
-        case x if (x > 6 && x < 14) => "Morning"
-        case x if (x >= 14 && x < 22) => "Afternoon"
-        case _ => "Night"
-      }
-    })
 
 
     def main(args: Array[String]): Unit = {
+    Logger.getLogger("org").setLevel(Level.OFF)
     val spark = SparkSession
       .builder()
       .appName("Spark SQL basic example")
@@ -83,8 +92,8 @@ object clickinBad {
     val ds = spark.read.json("../WI/data/data-students.json")
 
     val ds2 = preprocess(ds)
-    //ds2.summary().show()
-    ds2.groupBy("network").count().sort(col("count")).show()
+    ds2.summary().show()
+    //ds2.groupBy("network").count().sort(col("count")).show()
     //ds2.select("timestamp").show()
     val dsBidZero = ds2.filter(col("bidfloor") === 0)
     val dsBidZeroClick = dsBidZero.filter(col("label") === true).count()
