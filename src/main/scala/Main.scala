@@ -47,7 +47,7 @@ object clickinBad {
         
         // Replacing null values by "Unknown"s
 
-        val df1 = df.na.fill(Map("city" -> "Unknown","impid" -> "Unknown","interests" -> "Unknown","network" -> "Unknown","type" -> "Unknown"))
+        val df1 = df.na.fill(Map("city" -> "Unknown","interests" -> "Unknown","network" -> "Unknown","type" -> "Unknown"))
 
         val df2 = df1.select("appOrSite","interests","media","type","bidfloor","label","os","network","timestamp","size","city", "publisher")
         
@@ -65,23 +65,26 @@ object clickinBad {
 
       //print("\n\n\n" + df5.dtypes.foreach(println) +"\n\n")
 
-      val categoricals = df5.dtypes.filter (_._2 == "StringType").map (_._1)
+      // get categorical values
+      val stringTypes = df5.dtypes.filter(_._2 == "StringType").map(_._1)
 
-      val indexers = categoricals.map (
-        c => new StringIndexer().setInputCol(c).setOutputCol(s"${c}_idx")
+      val indexers = stringTypes.map (
+        c => new StringIndexer().setInputCol(c).setOutputCol(s"${c}_indexed")
       )
 
-      val encoders = categoricals.map (
-        c => new OneHotEncoder().setInputCol(s"${c}_idx").setOutputCol(s"${c}_enc")
+      val encoders = stringTypes.map (
+        c => new OneHotEncoder().setInputCol(s"${c}_indexed").setOutputCol(s"${c}_encoded")
       )
 
       val pipeline = new Pipeline().setStages(indexers ++ encoders)
+
+      // apply the indexed data to the dataframe
       val df6 = pipeline.fit(df5).transform(df5)
 
-      val assembler = new VectorAssembler().setInputCols(Array("appOrSite_enc", "bidfloor", "media_enc", "os_enc", "publisher_enc","network_enc")).setOutputCol("features")
+      val assembler = new VectorAssembler().setInputCols(Array("appOrSite_encoded", "bidfloor", "media_encoded", "os_encoded", "publisher_encoded","network_encoded")).setOutputCol("features")
       //return a dataframe with all of the  feature columns in  a vector column**
 
-      assembler.transform(df6).select("appOrSite", "bidfloor", "city", "interests", "label", "media", "network", "os", "publisher", "type", "features")
+      assembler.transform(df6).select("label", "features")
     }
 
 
@@ -98,11 +101,18 @@ object clickinBad {
 
     val ds2 = preprocess(ds)
     
-    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setWeightCol("classWeightCol").setMaxIter(10).setThreshold(0.7)
-    /* use logistic regression to train (fit) the model with the training data */
-    val lrModel = lr.fit(ds2.select("label", "features", "classWeightCol"))
+    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10).setRegParam(0.1).setElasticNetParam(0.1)
 
 
+    val splitData = ds2.randomSplit(Array(0.7,0.3))
+    var (trainingData, testData) = (splitData(0), splitData(1))
+
+    // use logistic regression to train (fit) the model with the training data 
+    val lrModel = lr.fit(trainingData)
+
+    println("lrModel done")
+
+    val predict = lrModel.transform(testData)
 
     spark.close()
   }
