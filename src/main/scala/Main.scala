@@ -14,22 +14,12 @@ object clickinBad {
     def preprocess(df: DataFrame): DataFrame = {
         val network = udf { // getting countries from networks
             (str: String) =>
-                val fr = new Regex("208-(.*)")
-                val can = new Regex("302-(.*)")
-                val es = new Regex("214-(.*)")
-                val tur = new Regex("286-(.*)")
-                val ger = new Regex("262-(.*)")
 
-                str match {
+              str match{
                 case null => "Unknown"
-                case fr(x) => "France"
-                case "Other" | "Unknown" => "Unknown"
-                case can(x) => "Canada"
-                case es(x) => "Espagne"
-                case tur(x) => "Turquie"
-                case ger(x) => "Allemagne"
-                case _ => "Other"
-            }
+                case s => if(s.length>2) {s.splitAt(3)._1} else "Unknown"
+              }
+              
         }
 
         // Replacing null values by "Unknown"s
@@ -53,7 +43,7 @@ object clickinBad {
             }
         }
 
-        val df2 = df.select("appOrSite","interests","media","type","bidfloor","label","os","network","timestamp","size")
+        val df2 = df.select("appOrSite","interests","media","type","bidfloor","label","os","network","timestamp","size","city")
         val df3 = df2.filter(!col("size").getItem(0).isNull)
         val df4 = df3.filter(!col("size").getItem(1).isNull)
 
@@ -93,8 +83,8 @@ object clickinBad {
     val ds = spark.read.json("/home/cyp/IG/WI/data-students.json")
 
     val ds2 = preprocess(ds)
-    ds2.summary().show()
-    //ds.groupBy("network").count().sort(col("count")).show()
+    //ds2.summary().show()
+    ds2.groupBy("network").count().sort(col("count")).show()
     //ds2.select("timestamp").show()
 
     spark.close()
