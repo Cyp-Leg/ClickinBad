@@ -9,6 +9,7 @@ import java.text.SimpleDateFormat
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.{StringIndexer, OneHotEncoder, VectorAssembler}
 import org.apache.log4j.{Logger, Level}
+import org.apache.spark.ml.classification.LogisticRegression
 
 object clickinBad {
   /* ----------------------------------------- */
@@ -25,10 +26,7 @@ object clickinBad {
               
         }
 
-        // Replacing null values by "Unknown"s
 
-        // Removing all add with size null
-        //val ds2 = unknown.filter(!col("size").getItem(0).isNull).filter(!col("size").getItem(1).isNull)
 
         // Gathering all windows phones together, set nulls & "Other" to "Unknown"
         val os = udf {
@@ -44,11 +42,17 @@ object clickinBad {
                 case "Rim" | "Bada" | "WebOS"| "Symbian" | "blackberry" => "Other"
                 case x => x.toLowerCase.capitalize
             }
-        }
+        }        
+        
+        
+        // Replacing null values by "Unknown"s
 
         val df1 = df.na.fill(Map("city" -> "Unknown","impid" -> "Unknown","interests" -> "Unknown","network" -> "Unknown","type" -> "Unknown"))
 
         val df2 = df1.select("appOrSite","interests","media","type","bidfloor","label","os","network","timestamp","size","city", "publisher")
+        
+        
+        // Removing all add with size null
         val df3 = df2.filter(!col("size").getItem(0).isNull)
         val df4 = df3.filter(!col("size").getItem(1).isNull)
 
@@ -81,6 +85,7 @@ object clickinBad {
     }
 
 
+
     def main(args: Array[String]): Unit = {
     Logger.getLogger("org").setLevel(Level.OFF)
     val spark = SparkSession
@@ -89,24 +94,13 @@ object clickinBad {
       .config(new SparkConf().setMaster("local").setAppName("AAAAA"))
       .getOrCreate()
 
-    val ds = spark.read.json("../WI/data/data-students.json")
+    val ds = spark.read.json("/home/cyp/IG/WI/data-students.json")
 
     val ds2 = preprocess(ds)
-    ds2.summary().show()
-    //ds2.groupBy("network").count().sort(col("count")).show()
-    //ds2.select("timestamp").show()
-    val dsBidZero = ds2.filter(col("bidfloor") === 0)
-    val dsBidZeroClick = dsBidZero.filter(col("label") === true).count()
-    val dsBidZeroNoClick = dsBidZero.filter(col("label") === false).count()
-
-    print("\n\n\n\n\n\n\n\n\n\n\n")
-    print(dsBidZero.count())
-    print("\n\n\n\n\n\n\n\n\n\n\n")
-    print(dsBidZeroClick)
-    print("\n\n\n\n\n\n\n\n\n\n\n")
-    print(dsBidZeroNoClick)
-    print("\n\n\n\n\n\n\n\n\n\n\n")
-
+    
+    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setWeightCol("classWeightCol").setMaxIter(10).setThreshold(0.7)
+    /* use logistic regression to train (fit) the model with the training data */
+    val lrModel = lr.fit(ds2.select("label", "features", "classWeightCol"))
 
 
 
