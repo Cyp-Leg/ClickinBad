@@ -105,21 +105,17 @@ object Main {
 
 
 
-   val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10)
+    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10)
 
 
-    val splitData = ds2.randomSplit(Array(0.7,0.3))
-    var (training, test) = (splitData(0), splitData(1))
-
-    print("TOTAL TRUE SPLITTED : " + training.filter(col("label") === "1").count())
+    var splittedDs = ds2.randomSplit(Array(0.7,0.3))
+    var (training, test) = (splittedDs(0),splittedDs(1))
 
 
     // use logistic regression to train (fit) the model with the training data 
     val lrModel = lr.fit(training)
 
     val predict = lrModel.transform(test)
-
-
 
 
 
