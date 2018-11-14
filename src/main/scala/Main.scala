@@ -101,18 +101,23 @@ object Main extends App {
 
     val ds = spark.read.json("/home/cyp/IG/WI/data-students.json")
 
-    val ds2 = preprocess(ds)
-    
-    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10).setThreshold(0.6)
+    val ds2 = preprocess(ds)    
 
 
-    val splitData = ds2.randomSplit(Array(0.7,0.3))
-    var (training, test) = (splitData(0), splitData(1))
+
+    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10)
+
+
+    var splittedDs = ds2.randomSplit(Array(0.7,0.3))
+    var (training, test) = (splittedDs(0),splittedDs(1))
+
 
     // use logistic regression to train (fit) the model with the training data 
     val lrModel = lr.fit(training)
 
     val predict = lrModel.transform(test)
+
+
 
     val evaluator = new BinaryClassificationEvaluator().setLabelCol("label").setRawPredictionCol("rawPrediction").setMetricName("areaUnderROC")
 
