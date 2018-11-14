@@ -103,13 +103,13 @@ object Main extends App {
       .config(new SparkConf().setMaster("local").setAppName("AAAAA"))
       .getOrCreate()
 
-    val ds = spark.read.json("/home/cyp/IG/WI/data-students.json")
+    val ds = spark.read.json("../WI/Data/data-students.json")
 
     val ds2 = preprocess(ds)    
 
 
 
-    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10)..setRegParam(0.3).setElasticNetParam(0.8)
+    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10).setRegParam(0.3).setElasticNetParam(0.8)
 
 
     var splittedDs = ds2.randomSplit(Array(0.7,0.3))
