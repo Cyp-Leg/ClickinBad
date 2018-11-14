@@ -11,7 +11,7 @@ import org.apache.spark.ml.feature.{StringIndexer, OneHotEncoder, VectorAssemble
 import org.apache.log4j.{Logger, Level}
 import org.apache.spark.ml.classification.LogisticRegression
 
-object clickinBad {
+object Main {
   /* ----------------------------------------- */
   /* -------------- Preprocessing ------------ */
   /* ----------------------------------------- */
