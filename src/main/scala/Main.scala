@@ -13,7 +13,7 @@ import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 
 
-object Main {
+object Main extends App {
   /* ----------------------------------------- */
   /* -------------- Preprocessing ------------ */
   /* ----------------------------------------- */
@@ -90,8 +90,8 @@ object Main {
     }
 
 
+    //////////// Entry point ////////////////
 
-    def main(args: Array[String]): Unit = {
     Logger.getLogger("org").setLevel(Level.OFF)
     val spark = SparkSession
       .builder()
@@ -141,5 +141,4 @@ object Main {
 
 
     spark.close()
-  }
 }
