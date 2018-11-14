@@ -3,13 +3,15 @@ import scala.util.matching.Regex
 import org.joda.time.format.DateTimeFormat
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.functions.{udf, when, col}
+import org.apache.spark.sql.functions.{udf, when, col, bround}
 import java.util.Date
 import java.text.SimpleDateFormat
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.{StringIndexer, OneHotEncoder, VectorAssembler}
 import org.apache.log4j.{Logger, Level}
 import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
+
 
 object Main {
   /* ----------------------------------------- */
@@ -49,7 +51,7 @@ object Main {
 
         val df1 = df.na.fill(Map("city" -> "Unknown","interests" -> "Unknown","network" -> "Unknown","type" -> "Unknown"))
 
-        val df2 = df1.select("appOrSite","interests","media","type","bidfloor","label","os","network","timestamp","size","city", "publisher")
+        val df2 = df1.select("appOrSite","interests","media","type","bidfloor","label","os","network","size","city", "publisher")
         
         
         // Removing all add with size null
@@ -101,18 +103,42 @@ object Main {
 
     val ds2 = preprocess(ds)
     
-    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10).setRegParam(0.1).setElasticNetParam(0.1)
+    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10).setThreshold(0.6)
 
 
     val splitData = ds2.randomSplit(Array(0.7,0.3))
-    var (trainingData, testData) = (splitData(0), splitData(1))
+    var (training, test) = (splitData(0), splitData(1))
 
     // use logistic regression to train (fit) the model with the training data 
-    val lrModel = lr.fit(trainingData)
+    val lrModel = lr.fit(training)
 
-    println("lrModel done")
+    val predict = lrModel.transform(test)
 
-    val predict = lrModel.transform(testData)
+    val evaluator = new BinaryClassificationEvaluator().setLabelCol("label").setRawPredictionCol("rawPrediction").setMetricName("areaUnderROC")
+
+    val accuracy = evaluator.evaluate(predict)
+
+
+
+    val lp = predict.select("label", "prediction")
+    val counttotal = predict.count()
+    val correct = lp.filter(col("label") === col("prediction")).count()
+    val wrong = lp.filter(!(col("label") === col("prediction"))).count()
+    val truep = lp.filter(col("prediction") === 0.0).filter(col("label") === col("prediction")).count()
+    val falseN = lp.filter(col("prediction") === 0.0).filter(!(col("label") === col("prediction"))).count()
+    val falseP = lp.filter(col("prediction") === 1.0).filter(!(col("label") === col("prediction"))).count()
+    val ratioWrong=wrong.toDouble/counttotal.toDouble
+    val ratioCorrect=correct.toDouble/counttotal.toDouble
+
+    println("\n Correct : " + correct)
+    println("Wrong : " + wrong)
+    println("True positive : " + truep)
+    println("False negative : " + falseN)
+    println("False positive : " + falseP)
+    println("Ratio wrong : " + ratioWrong)
+    println("Ratio correct : " + ratioCorrect)
+
+
 
     spark.close()
   }
