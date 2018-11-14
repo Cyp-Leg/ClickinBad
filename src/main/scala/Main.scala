@@ -46,8 +46,9 @@ object Main extends App {
                 case "Rim" | "Bada" | "WebOS"| "Symbian" | "blackberry" => "Other"
                 case x => x.toLowerCase.capitalize
             }
-        }        
-        
+        }
+
+        val toDouble = udf[Double, String]( _.toDouble)        
         
         // Replacing null values by "Unknown"s
 
@@ -64,7 +65,8 @@ object Main extends App {
       {df4.withColumn("bidfloor", when(col("bidfloor").isNull, 3).otherwise(col("bidfloor")))
       .withColumn("label", when(col("label") === true, 1).otherwise(0))
       .withColumn("os", os(df4("os")))
-      .withColumn("network", network(df4("network")))} 
+      .withColumn("network", network(df4("network")))
+      .withColumn("label", toDouble(col("label")))} 
 
 
       //print("\n\n\n" + df5.dtypes.foreach(println) +"\n\n")
@@ -107,7 +109,7 @@ object Main extends App {
 
 
 
-    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10).setRegParam(0.3).setElasticNetParam(0.8)
+    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10)..setRegParam(0.3).setElasticNetParam(0.8)
 
 
     var splittedDs = ds2.randomSplit(Array(0.7,0.3))
@@ -115,22 +117,24 @@ object Main extends App {
 
 
     // use logistic regression to train (fit) the model with the training data 
-    val lrModel = lr.fit(training)
+    val lrModel = lr.fit(ds2)
 
-    val predict = lrModel.transform(test)
+    val predict = lrModel.transform(ds2)
 
-    val toDouble = udf[Double, String]( _.toDouble)
+    println("TRUE : " + predict.filter(col("label")==="1").count())
+    println("NOMBRE DE PREDITS : " + predict.filter(col("prediction") === "1.0").count())
 
-    val predict2 = predict.withColumn("label", toDouble(predict.col("label")))
+    predict.show()
 
-
+    /*val toDouble = udf[Double, String]( _.toDouble)
+  
     val evaluator = new BinaryClassificationEvaluator().setLabelCol("label").setRawPredictionCol("rawPrediction").setMetricName("areaUnderROC")
 
     val accuracy = evaluator.evaluate(predict)
 
 
 
-    val lp = predict2.select("label", "prediction")
+    val lp = predict.select("label", "prediction")
     val counttotal = predict.count()
     val correct = lp.filter(col("label") === col("prediction")).count()
     val wrong = lp.filter(!(col("label") === col("prediction"))).count()
@@ -151,11 +155,10 @@ object Main extends App {
 
 
     // use MLlib to evaluate, convert DF to RDD**
-    val predictionAndLabels = predict2.select("rawPrediction", "label").rdd.map(x => (x(0).asInstanceOf[DenseVector](1), x(1).asInstanceOf[Double]))
+    val predictionAndLabels = predict.select("rawPrediction", "label").rdd.map(x => (x(0).asInstanceOf[DenseVector](1), x(1).asInstanceOf[Double]))
     val metrics = new BinaryClassificationMetrics(predictionAndLabels)
     println("area under the precision-recall curve: " + metrics.areaUnderPR)
     println("area under the receiver operating characteristic (ROC) curve : " + metrics.areaUnderROC)
-
-
+*/
     spark.close()
 }
