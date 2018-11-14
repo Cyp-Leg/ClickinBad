@@ -11,6 +11,8 @@ import org.apache.spark.ml.feature.{StringIndexer, OneHotEncoder, VectorAssemble
 import org.apache.log4j.{Logger, Level}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
+import org.apache.spark.ml.linalg.DenseVector
 
 
 object Main extends App {
@@ -105,7 +107,7 @@ object Main extends App {
 
 
 
-    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10)
+    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10).setRegParam(0.3).setElasticNetParam(0.8)
 
 
     var splittedDs = ds2.randomSplit(Array(0.7,0.3))
@@ -117,6 +119,9 @@ object Main extends App {
 
     val predict = lrModel.transform(test)
 
+    val toDouble = udf[Double, String]( _.toDouble)
+
+    val predict2 = predict.withColumn("label", toDouble(predict.col("label")))
 
 
     val evaluator = new BinaryClassificationEvaluator().setLabelCol("label").setRawPredictionCol("rawPrediction").setMetricName("areaUnderROC")
@@ -125,15 +130,16 @@ object Main extends App {
 
 
 
-    val lp = predict.select("label", "prediction")
+    val lp = predict2.select("label", "prediction")
     val counttotal = predict.count()
     val correct = lp.filter(col("label") === col("prediction")).count()
     val wrong = lp.filter(!(col("label") === col("prediction"))).count()
-    val truep = lp.filter(col("prediction") === 0.0).filter(col("label") === col("prediction")).count()
-    val falseN = lp.filter(col("prediction") === 0.0).filter(!(col("label") === col("prediction"))).count()
-    val falseP = lp.filter(col("prediction") === 1.0).filter(!(col("label") === col("prediction"))).count()
+    val truep = lp.filter(col("prediction") === 1.0).filter(col("label") === col("prediction")).count()
+    val falseN = lp.filter(col("prediction") === 1.0).filter(!(col("label") === col("prediction"))).count()
+    val falseP = lp.filter(col("prediction") === 0.0).filter(!(col("label") === col("prediction"))).count()
     val ratioWrong=wrong.toDouble/counttotal.toDouble
     val ratioCorrect=correct.toDouble/counttotal.toDouble
+    
 
     println("\n Correct : " + correct)
     println("Wrong : " + wrong)
@@ -143,6 +149,12 @@ object Main extends App {
     println("Ratio wrong : " + ratioWrong)
     println("Ratio correct : " + ratioCorrect)
 
+
+    // use MLlib to evaluate, convert DF to RDD**
+    val predictionAndLabels = predict2.select("rawPrediction", "label").rdd.map(x => (x(0).asInstanceOf[DenseVector](1), x(1).asInstanceOf[Double]))
+    val metrics = new BinaryClassificationMetrics(predictionAndLabels)
+    println("area under the precision-recall curve: " + metrics.areaUnderPR)
+    println("area under the receiver operating characteristic (ROC) curve : " + metrics.areaUnderROC)
 
 
     spark.close()
