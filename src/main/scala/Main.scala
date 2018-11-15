@@ -7,12 +7,15 @@ import org.apache.spark.sql.functions.{udf, when, col, bround}
 import java.util.Date
 import java.text.SimpleDateFormat
 import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.feature.{StringIndexer, OneHotEncoder, VectorAssembler}
+import org.apache.spark.ml.feature.{StringIndexer, OneHotEncoder, VectorAssembler, VectorSlicer}
 import org.apache.log4j.{Logger, Level}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.ml.linalg.DenseVector
+import org.apache.spark.sql.types.StringType
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.sql.functions._
 
 
 object Main extends App {
@@ -54,7 +57,7 @@ object Main extends App {
 
         val df1 = df.na.fill(Map("city" -> "Unknown","interests" -> "Unknown","network" -> "Unknown","type" -> "Unknown"))
 
-        val df2 = df1.select("appOrSite","interests","media","type","bidfloor","label","os","network","size","city", "publisher")
+        val df2 = df1.select("appOrSite","interests","media","type","bidfloor","label","network","size", "publisher", "os")
         
         
         // Removing all add with size null
@@ -63,8 +66,8 @@ object Main extends App {
 
         val df5 = 
       {df4.withColumn("bidfloor", when(col("bidfloor").isNull, 3).otherwise(col("bidfloor")))
+      .withColumn("size", df4("size").cast(StringType))
       .withColumn("label", when(col("label") === true, 1).otherwise(0))
-      .withColumn("os", os(df4("os")))
       .withColumn("network", network(df4("network")))}
 
       //print("\n\n\n" + df5.dtypes.foreach(println) +"\n\n")
@@ -73,29 +76,32 @@ object Main extends App {
       val stringTypes = df5.dtypes.filter(_._2 == "StringType").map(_._1)
 
       val indexers = stringTypes.map (
-        c => new StringIndexer().setInputCol(c).setOutputCol(s"${c}_indexed")
+        c => new StringIndexer().setInputCol(c).setOutputCol(s"${c}_indexed").setHandleInvalid("skip")
       )
+
 
       val encoders = stringTypes.map (
         c => new OneHotEncoder().setInputCol(s"${c}_indexed").setOutputCol(s"${c}_encoded")
       )
+
 
       val pipeline = new Pipeline().setStages(indexers ++ encoders)
 
       // apply the indexed data to the dataframe
       val df6 = pipeline.fit(df5).transform(df5)
 
-      val assembler = new VectorAssembler().setInputCols(Array("appOrSite_encoded", "bidfloor", "media_encoded", "os_encoded", "publisher_encoded","network_encoded")).setOutputCol("features")
+
+      val assembler = new VectorAssembler().setInputCols(Array("appOrSite_encoded", "bidfloor", "interests_encoded", "media_encoded", "publisher_encoded","network_encoded", "size_encoded", "os_encoded", "type_encoded")).setOutputCol("features")
       //return a dataframe with all of the  feature columns in  a vector column**
 
-      assembler.transform(df6).select("label", "features")
+      assembler.transform(df6).select("label", "features", "appOrSite","interests","media","type","bidfloor","network","size", "publisher", "os")
     }
 
     def balanceDataset(dataset: DataFrame): DataFrame = {
     // Re-balancing (weighting) of records to be used in the logistic loss objective function
     // This function improve the weight of the true label while it decrease the weight of false label
-    val numNegatives = dataset.filter(dataset("label") === 0).count
-    val datasetSize = dataset.count
+    val numNegatives = dataset.filter(dataset("label") === 0).count()
+    val datasetSize = dataset.count()
     val balancingRatio = (datasetSize - numNegatives).toDouble / datasetSize
 
     val calculateWeights = udf { d: Double =>
@@ -122,31 +128,37 @@ object Main extends App {
       .config(new SparkConf().setMaster("local").setAppName("ClickinBad"))
       .getOrCreate()
 
-    val ds = spark.read.json("../WI/Data/data-students.json")
+    val ds = spark.read.json(args(0))
 
     val ds2 = preprocess(ds)
 
-    
 
+    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setWeightCol("classWeightCol")
 
-    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setWeightCol("classWeightCol").setThreshold(0.4)
-
-
-    var splittedDs = ds2.randomSplit(Array(0.9,0.1))
-    var (training, test) = (splittedDs(0),splittedDs(1))
-    
-    val trainingDS = balanceDataset(training)
+    val trainingDS = balanceDataset(ds2.select("label","features"))
 
     // use logistic regression to train (fit) the model with the training data 
     val lrModel = lr.fit(trainingDS.select("label", "features", "classWeightCol"))
 
-    val predict = lrModel.transform(test)
+    val test = spark.read.json(args(1))
+
+    val cleanTest = preprocess(test)
+
+    val predict = lrModel.transform(cleanTest)
+
 
     val toDouble = udf[Double, String]( _.toDouble)
 
     val predict2 = predict.withColumn("label", toDouble(predict("label")))
-  
-    // Optimal threshold value found : 0.4
+
+    predict2.printSchema()
+
+
+
+    //* --------------------------------------------- */
+    /* ----------------- Evaluation ---------------- */
+    /* -Uncomment following lines to display rates- */
+
     val evaluator = new BinaryClassificationEvaluator().setLabelCol("label").setRawPredictionCol("rawPrediction").setMetricName("areaUnderROC")
 
     val accuracy = evaluator.evaluate(predict)
@@ -160,7 +172,7 @@ object Main extends App {
     val truep = lp.filter(col("prediction") === 1.0).filter(col("label") === col("prediction")).count()
     val falseN = lp.filter(col("prediction") === 0.0).filter(!(col("label") === col("prediction"))).count()
     val falseP = lp.filter(col("prediction") === 1.0).filter(!(col("label") === col("prediction"))).count()
-    val recall = truep/(truep+falseN)
+    val recall = truep.toDouble/(truep.toDouble+falseN.toDouble)
     val ratioWrong=wrong.toDouble/counttotal.toDouble
     val ratioCorrect=correct.toDouble/counttotal.toDouble
     
@@ -180,6 +192,10 @@ object Main extends App {
     val metrics = new BinaryClassificationMetrics(predictionAndLabels)
     println("area under the precision-recall curve: " + metrics.areaUnderPR)
     println("area under the receiver operating characteristic (ROC) curve : " + metrics.areaUnderROC)
-
+    
+    
+    // Exporting as CSV file
+    val finalDs = predict2.drop("label").withColumn("Label", predict2("prediction")).select("Label","appOrSite","interests","media","type","bidfloor","network","size", "publisher", "os")
+    finalDs.coalesce(1).write.format("com.databricks.spark.csv").option("header", "true").save("result_predictions")
     spark.close()
 }
