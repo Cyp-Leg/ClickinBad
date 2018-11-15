@@ -29,7 +29,7 @@ object Main extends App {
               }
               
         }
-
+        
 
 
         // Gathering all windows phones together, set nulls & "Other" to "Unknown"
@@ -65,9 +65,7 @@ object Main extends App {
       {df4.withColumn("bidfloor", when(col("bidfloor").isNull, 3).otherwise(col("bidfloor")))
       .withColumn("label", when(col("label") === true, 1).otherwise(0))
       .withColumn("os", os(df4("os")))
-      .withColumn("network", network(df4("network")))
-      .withColumn("label", toDouble(col("label")))} 
-
+      .withColumn("network", network(df4("network")))}
 
       //print("\n\n\n" + df5.dtypes.foreach(println) +"\n\n")
 
@@ -93,6 +91,27 @@ object Main extends App {
       assembler.transform(df6).select("label", "features")
     }
 
+    def balanceDataset(dataset: DataFrame): DataFrame = {
+    // Re-balancing (weighting) of records to be used in the logistic loss objective function
+    // This function improve the weight of the true label while it decrease the weight of false label
+    val numNegatives = dataset.filter(dataset("label") === 0).count
+    val datasetSize = dataset.count
+    val balancingRatio = (datasetSize - numNegatives).toDouble / datasetSize
+
+    val calculateWeights = udf { d: Double =>
+      if (d == 0.0) {
+        1 * balancingRatio
+      }
+      else {
+        (1 * (1.0 - balancingRatio))
+      }
+    }
+
+    val weightedDataset = dataset.withColumn("classWeightCol", calculateWeights(dataset("label")))
+    weightedDataset
+  }
+
+
 
     //////////// Entry point ////////////////
 
@@ -100,47 +119,48 @@ object Main extends App {
     val spark = SparkSession
       .builder()
       .appName("Spark SQL basic example")
-      .config(new SparkConf().setMaster("local").setAppName("AAAAA"))
+      .config(new SparkConf().setMaster("local").setAppName("ClickinBad"))
       .getOrCreate()
 
     val ds = spark.read.json("../WI/Data/data-students.json")
 
-    val ds2 = preprocess(ds)    
+    val ds2 = preprocess(ds)
+
+    
 
 
+    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setWeightCol("classWeightCol").setThreshold(0.4)
 
-    val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setMaxIter(10).setRegParam(0.3).setElasticNetParam(0.8)
 
-
-    var splittedDs = ds2.randomSplit(Array(0.7,0.3))
+    var splittedDs = ds2.randomSplit(Array(0.9,0.1))
     var (training, test) = (splittedDs(0),splittedDs(1))
-
+    
+    val trainingDS = balanceDataset(training)
 
     // use logistic regression to train (fit) the model with the training data 
-    val lrModel = lr.fit(ds2)
+    val lrModel = lr.fit(trainingDS.select("label", "features", "classWeightCol"))
 
-    val predict = lrModel.transform(ds2)
+    val predict = lrModel.transform(test)
 
-    println("TRUE : " + predict.filter(col("label")==="1").count())
-    println("NOMBRE DE PREDITS : " + predict.filter(col("prediction") === "1.0").count())
+    val toDouble = udf[Double, String]( _.toDouble)
 
-    predict.show()
-
-    /*val toDouble = udf[Double, String]( _.toDouble)
+    val predict2 = predict.withColumn("label", toDouble(predict("label")))
   
+    // Optimal threshold value found : 0.4
     val evaluator = new BinaryClassificationEvaluator().setLabelCol("label").setRawPredictionCol("rawPrediction").setMetricName("areaUnderROC")
 
     val accuracy = evaluator.evaluate(predict)
 
 
 
-    val lp = predict.select("label", "prediction")
+    val lp = predict2.select("label", "prediction")
     val counttotal = predict.count()
     val correct = lp.filter(col("label") === col("prediction")).count()
     val wrong = lp.filter(!(col("label") === col("prediction"))).count()
     val truep = lp.filter(col("prediction") === 1.0).filter(col("label") === col("prediction")).count()
-    val falseN = lp.filter(col("prediction") === 1.0).filter(!(col("label") === col("prediction"))).count()
-    val falseP = lp.filter(col("prediction") === 0.0).filter(!(col("label") === col("prediction"))).count()
+    val falseN = lp.filter(col("prediction") === 0.0).filter(!(col("label") === col("prediction"))).count()
+    val falseP = lp.filter(col("prediction") === 1.0).filter(!(col("label") === col("prediction"))).count()
+    val recall = truep/(truep+falseN)
     val ratioWrong=wrong.toDouble/counttotal.toDouble
     val ratioCorrect=correct.toDouble/counttotal.toDouble
     
@@ -150,15 +170,16 @@ object Main extends App {
     println("True positive : " + truep)
     println("False negative : " + falseN)
     println("False positive : " + falseP)
+    println("Recall : " + recall)
     println("Ratio wrong : " + ratioWrong)
     println("Ratio correct : " + ratioCorrect)
 
 
     // use MLlib to evaluate, convert DF to RDD**
-    val predictionAndLabels = predict.select("rawPrediction", "label").rdd.map(x => (x(0).asInstanceOf[DenseVector](1), x(1).asInstanceOf[Double]))
+    val predictionAndLabels = predict2.select("rawPrediction", "label").rdd.map(x => (x(0).asInstanceOf[DenseVector](1), x(1).asInstanceOf[Double]))
     val metrics = new BinaryClassificationMetrics(predictionAndLabels)
     println("area under the precision-recall curve: " + metrics.areaUnderPR)
     println("area under the receiver operating characteristic (ROC) curve : " + metrics.areaUnderROC)
-*/
+
     spark.close()
 }
