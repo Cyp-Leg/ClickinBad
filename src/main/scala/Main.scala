@@ -57,7 +57,7 @@ object Main extends App {
 
         val df1 = df.na.fill(Map("city" -> "Unknown","interests" -> "Unknown","network" -> "Unknown","type" -> "Unknown"))
 
-        val df2 = df1.select("appOrSite","interests","media","type","bidfloor","label","network","size", "publisher", "os")
+        val df2 = df1.select("appOrSite","interests","media","type","bidfloor","label","network","size", "city", "os")
         
         
         // Removing all add with size null
@@ -70,20 +70,18 @@ object Main extends App {
       .withColumn("label", when(col("label") === true, 1).otherwise(0))
       .withColumn("network", network(df4("network")))}
 
-      //print("\n\n\n" + df5.dtypes.foreach(println) +"\n\n")
 
       // get categorical values
       val stringTypes = df5.dtypes.filter(_._2 == "StringType").map(_._1)
 
+      // index them
       val indexers = stringTypes.map (
         c => new StringIndexer().setInputCol(c).setOutputCol(s"${c}_indexed").setHandleInvalid("skip")
       )
 
-
       val encoders = stringTypes.map (
         c => new OneHotEncoder().setInputCol(s"${c}_indexed").setOutputCol(s"${c}_encoded")
       )
-
 
       val pipeline = new Pipeline().setStages(indexers ++ encoders)
 
@@ -91,11 +89,13 @@ object Main extends App {
       val df6 = pipeline.fit(df5).transform(df5)
 
 
-      val assembler = new VectorAssembler().setInputCols(Array("appOrSite_encoded", "bidfloor", "interests_encoded", "media_encoded", "publisher_encoded","network_encoded", "size_encoded", "os_encoded", "type_encoded")).setOutputCol("features")
+      val assembler = new VectorAssembler().setInputCols(Array("appOrSite_encoded", "bidfloor", "interests_encoded", "media_encoded", "city_encoded","network_encoded", "size_encoded", "os_encoded", "type_encoded")).setOutputCol("features")
+      
       //return a dataframe with all of the  feature columns in  a vector column**
-
-      assembler.transform(df6).select("label", "features", "appOrSite","interests","media","type","bidfloor","network","size", "publisher", "os")
+      assembler.transform(df6).select("label", "features", "appOrSite","interests","media","type","bidfloor","network","size", "city", "os")
     }
+
+
 
     def balanceDataset(dataset: DataFrame): DataFrame = {
     // Re-balancing (weighting) of records to be used in the logistic loss objective function
@@ -132,34 +132,31 @@ object Main extends App {
 
     val ds2 = preprocess(ds)
 
-
+    // initializing logistic regression object & balance training dataset
     val lr = new LogisticRegression().setLabelCol("label").setFeaturesCol("features").setWeightCol("classWeightCol")
-
     val trainingDS = balanceDataset(ds2.select("label","features"))
 
     // use logistic regression to train (fit) the model with the training data 
     val lrModel = lr.fit(trainingDS.select("label", "features", "classWeightCol"))
 
+    // read the text file, preprocess it and apply the logistic regression model
     val test = spark.read.json(args(1))
-
     val cleanTest = preprocess(test)
-
     val predict = lrModel.transform(cleanTest)
 
-
+    // casting label to Double type (for BinaryClassficationMetrics to get the ROC)
     val toDouble = udf[Double, String]( _.toDouble)
-
     val predict2 = predict.withColumn("label", toDouble(predict("label")))
 
-    predict2.printSchema()
 
 
+    //* ----------------------------------------------------------------------------- */
+    /* ---------------------------------- Evaluation -------------------------------- */
+    /* ------------------Uncomment following lines to display rates------------------ */
+    /* /!\ You should test a file containing a "label" column to get the stastics /!\ */
+    //* ----------------------------------------------------------------------------- */
 
-    //* --------------------------------------------- */
-    /* ----------------- Evaluation ---------------- */
-    /* -Uncomment following lines to display rates- */
-
-    val evaluator = new BinaryClassificationEvaluator().setLabelCol("label").setRawPredictionCol("rawPrediction").setMetricName("areaUnderROC")
+    /*val evaluator = new BinaryClassificationEvaluator().setLabelCol("label").setRawPredictionCol("rawPrediction").setMetricName("areaUnderROC")
 
     val accuracy = evaluator.evaluate(predict)
 
@@ -192,10 +189,12 @@ object Main extends App {
     val metrics = new BinaryClassificationMetrics(predictionAndLabels)
     println("area under the precision-recall curve: " + metrics.areaUnderPR)
     println("area under the receiver operating characteristic (ROC) curve : " + metrics.areaUnderROC)
-    
+    */
     
     // Exporting as CSV file
-    val finalDs = predict2.drop("label").withColumn("Label", predict2("prediction")).select("Label","appOrSite","interests","media","type","bidfloor","network","size", "publisher", "os")
+
+    val finalDs = predict2.withColumn("Label", predict2("prediction")).select("Label","appOrSite","interests","media","type","bidfloor","network","size", "city", "os")
     finalDs.coalesce(1).write.format("com.databricks.spark.csv").option("header", "true").save("result_predictions")
+    
     spark.close()
 }
