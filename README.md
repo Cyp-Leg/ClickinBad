@@ -24,7 +24,7 @@ nb: Be aware that you don't already have a directory called 'result_predictions'
 For example you can put train.json and a test.json in the root directory of this project and run:
 
 ```
-./run.sh data-students.json test.json
+./run.sh train.json test.json
 ```
 
 ## Source code
